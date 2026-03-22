@@ -36,6 +36,9 @@ KEY_AMOUNT = "amount"
 KEY_DATE = "date"
 KEY_CATEGORY = "category"
 
+type DateComparable = tuple[int, int, int]
+type MonthlyStats = tuple[float, float, dict[str, float]]
+
 financial_transactions_storage: list[dict[str, Any]] = []
 
 
@@ -47,7 +50,9 @@ def is_leap_year(year: int) -> bool:
 
 
 def _is_valid_date_parts(parts: list[str]) -> bool:
-    return len(parts) == DATE_PARTS_LEN and all(part.isdigit() for part in parts)
+    if len(parts) != DATE_PARTS_LEN:
+        return False
+    return all(part.isdigit() for part in parts)
 
 
 def _is_valid_day(day: int, month: int, year: int) -> bool:
@@ -59,21 +64,20 @@ def _is_valid_day(day: int, month: int, year: int) -> bool:
     return 1 <= day <= days_in_month
 
 
-def extract_date(maybe_dt: str) -> tuple[int, int, int] | None:
-    parts = list(maybe_dt.split("-"))
+def extract_date(maybe_dt: str) -> DateComparable | None:
+    parts = maybe_dt.split("-")
     if not _is_valid_date_parts(parts):
         return None
 
     day, month, year = map(int, parts)
-    if not (
-        len(parts[2]) == YEAR_LEN
-        and year > 0
-        and len(parts[1]) == MONTH_LEN
-        and 1 <= month <= MONTHS_IN_YEAR
-        and len(parts[0]) == DAY_LEN
-        and _is_valid_day(day, month, year)
-    ):
+
+    if len(parts[2]) != YEAR_LEN or year <= 0:
         return None
+    if len(parts[1]) != MONTH_LEN or not (1 <= month <= MONTHS_IN_YEAR):
+        return None
+    if len(parts[0]) != DAY_LEN or not _is_valid_day(day, month, year):
+        return None
+
     return day, month, year
 
 
@@ -103,32 +107,32 @@ def cost_categories_handler() -> str:
     return "\n".join(f"{k}: {v}" for k, v in EXPENSE_CATEGORIES.items())
 
 
-def date_gentle(date_str: str) -> tuple[int, int, int]:
-    parts = list(date_str.split("-"))
-    return int(parts[2]), int(parts[1]), int(parts[0])
+def date_gentle(date_str: str) -> DateComparable:
+    parts = date_str.split("-")
+    year = int(parts[2])
+    month = int(parts[1])
+    day = int(parts[0])
+    return year, month, day
 
 
-def get_monthly_stats(report_date_comparable: tuple[int, int, int]) -> tuple[float, float, dict[str, float]]:
-    monthly_income = 0.0
-    monthly_expense = 0.0
+def get_monthly_stats(report_date_comparable: DateComparable) -> MonthlyStats:
+    monthly_income = 0
+    monthly_expense = 0
     category_expenses: dict[str, float] = {}
 
     for transaction in financial_transactions_storage:
-        date = date_gentle(transaction[KEY_DATE])
-        if date[:2] == report_date_comparable[:2]:
+        if date_gentle(transaction[KEY_DATE])[:2] == report_date_comparable[:2]:
+            amount = transaction[KEY_AMOUNT]
             if KEY_CATEGORY in transaction:
-                monthly_expense += transaction[KEY_AMOUNT]
-                category = transaction.get(KEY_CATEGORY)
-                if category:
-                    category_expenses[category] = (
-                        category_expenses.get(category, 0) + transaction[KEY_AMOUNT]
-                    )
+                monthly_expense += amount
+                category = transaction[KEY_CATEGORY]
+                category_expenses[category] = category_expenses.get(category, 0) + amount
             else:
-                monthly_income += transaction[KEY_AMOUNT]
+                monthly_income += amount
     return monthly_income, monthly_expense, category_expenses
 
 
-def get_total_capital(report_date_comparable: tuple[int, int, int]) -> float:
+def get_total_capital(report_date_comparable: DateComparable) -> float:
     uptill_income = 0
     uptill_expense = 0
 
@@ -142,9 +146,8 @@ def get_total_capital(report_date_comparable: tuple[int, int, int]) -> float:
     return uptill_income - uptill_expense
 
 
-def stats_handler(report_date: str) -> None:
-    report_date_comparable = date_gentle(report_date)
-    month_income, month_expense, month_category_expenses = get_monthly_stats(report_date_comparable)
+def _print_statistics_report(report_date: str, report_date_comparable: DateComparable) -> None:
+    month_income, month_expense, category_expenses = get_monthly_stats(report_date_comparable)
     uptill_capital = get_total_capital(report_date_comparable)
     month_res = month_income - month_expense
 
@@ -158,10 +161,14 @@ def stats_handler(report_date: str) -> None:
     print(f"Expenses: {month_expense:.2f} rubles")
     print()
     print("Details (category: amount):")
-
-    if month_category_expenses:
-        for j, (category, amount) in enumerate(sorted(month_category_expenses.items()), 1):
+    if category_expenses:
+        for j, (category, amount) in enumerate(sorted(category_expenses.items()), 1):
             print(f"{j}. {category}: {amount:.2f}")
+
+
+def stats_handler(report_date: str) -> None:
+    report_date_comparable = date_gentle(report_date)
+    _print_statistics_report(report_date, report_date_comparable)
 
 
 def income(words: list[str]) -> None:
@@ -182,32 +189,44 @@ def income(words: list[str]) -> None:
         print(income_handler(amount, date_str))
 
 
+def _validate_cost_command_structure(words: list[str]) -> str | None:
+    if len(words) == COST_COMMAND_LEN:
+        return None
+    return UNKNOWN_COMMAND_MSG
+
+
+def _parse_and_validate_category(category_str: str) -> str | None:
+    category_parts = category_str.split("::")
+    if len(category_parts) != CATEGORY_PARTS_LEN:
+        return NOT_EXISTS_CATEGORY
+
+    common_category, target_category = category_parts
+    if common_category not in EXPENSE_CATEGORIES:
+        return NOT_EXISTS_CATEGORY
+    if target_category not in EXPENSE_CATEGORIES.get(common_category, []):
+        return NOT_EXISTS_CATEGORY
+    return None
+
+
 def _validate_cost_input(words: list[str]) -> str | None:
-    error_message = None
-    if len(words) != COST_COMMAND_LEN:
-        error_message = UNKNOWN_COMMAND_MSG
-    else:
-        category_str, amount_str, date_str = words[1], words[2], words[3]
-        category_parts = category_str.split("::")
-        if len(category_parts) != CATEGORY_PARTS_LEN:
-            error_message = NOT_EXISTS_CATEGORY
-        else:
-            common_category, target_category = category_parts
-            if not (
-                common_category in EXPENSE_CATEGORIES and target_category in EXPENSE_CATEGORIES.get(common_category, [])
-            ):
-                error_message = NOT_EXISTS_CATEGORY
-            else:
-                amount = extract_amount(amount_str)
-                if amount is None:
-                    error_message = UNKNOWN_COMMAND_MSG
-                elif amount <= 0:
-                    error_message = NONPOSITIVE_VALUE_MSG
-                elif extract_date(date_str) is None:
-                    error_message = INCORRECT_DATE_MSG
-                else:
-                    return cost_handler(target_category, amount, date_str)
-    return error_message
+    if error_message := _validate_cost_command_structure(words):
+        return error_message
+
+    category_str, amount_str, date_str = words[1], words[2], words[3]
+
+    if error_message := _parse_and_validate_category(category_str):
+        return error_message
+
+    amount = extract_amount(amount_str)
+    if amount is None:
+        return UNKNOWN_COMMAND_MSG
+    if amount <= 0:
+        return NONPOSITIVE_VALUE_MSG
+    if extract_date(date_str) is None:
+        return INCORRECT_DATE_MSG
+
+    _, target_category = category_str.split("::")
+    return cost_handler(target_category, amount, date_str)
 
 
 def cost(words: list[str]) -> None:
@@ -234,7 +253,7 @@ def stats(words: list[str]) -> None:
 
 
 def line_handler(line: str) -> None:
-    words = list(line.split())
+    words = line.split()
     if not words:
         print(UNKNOWN_COMMAND_MSG)
         return
@@ -252,7 +271,10 @@ def line_handler(line: str) -> None:
 
 def main() -> None:
     while True:
-        line = input()
+        try:
+            line = input()
+        except EOFError:
+            break
         if not line:
             break
         line_handler(line)
