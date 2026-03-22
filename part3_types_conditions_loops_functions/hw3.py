@@ -71,13 +71,14 @@ def extract_date(maybe_dt: str) -> DateComparable | None:
 
     day, month, year = map(int, parts)
 
-    if len(parts[2]) != YEAR_LEN or year <= 0:
-        return None
-    if len(parts[1]) != MONTH_LEN or not (1 <= month <= MONTHS_IN_YEAR):
-        return None
-    if len(parts[0]) != DAY_LEN:
-        return None
-    if not _is_valid_day(day, month, year):
+    if (
+        len(parts[2]) != YEAR_LEN or
+        year <= 0 or
+        len(parts[1]) != MONTH_LEN or
+        not (1 <= month <= MONTHS_IN_YEAR) or
+        len(parts[0]) != DAY_LEN or
+        not _is_valid_day(day, month, year)
+    ):
         return None
 
     return day, month, year
@@ -217,15 +218,15 @@ def _parse_and_validate_category(category_str: str) -> str | None:
     return None
 
 
-def _validate_amount_and_date(amount_str: str, date_str: str) -> str | None:
+def _validate_amount_and_date(amount_str: str, date_str: str) -> tuple[float | None, str | None]:
     amount = extract_amount(amount_str)
     if amount is None:
-        return UNKNOWN_COMMAND_MSG
+        return None, UNKNOWN_COMMAND_MSG
     if amount <= 0:
-        return NONPOSITIVE_VALUE_MSG
+        return None, NONPOSITIVE_VALUE_MSG
     if extract_date(date_str) is None:
-        return INCORRECT_DATE_MSG
-    return None
+        return None, INCORRECT_DATE_MSG
+    return amount, None
 
 
 def _validate_cost_input(words: list[str]) -> str | None:
@@ -239,12 +240,11 @@ def _validate_cost_input(words: list[str]) -> str | None:
     if error_message:
         return error_message
 
-    error_message = _validate_amount_and_date(amount_str, date_str)
+    amount, error_message = _validate_amount_and_date(amount_str, date_str)
     if error_message:
         return error_message
 
     _, target_category = category_str.split("::")
-    amount = extract_amount(amount_str)
     return cost_handler(target_category, amount, date_str)
 
 
