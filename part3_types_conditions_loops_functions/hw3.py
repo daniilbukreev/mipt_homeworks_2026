@@ -71,10 +71,11 @@ def extract_date(maybe_dt: str) -> DateComparable | None:
 
     day, month, year = map(int, parts)
 
-    valid_year = len(parts[2]) == YEAR_LEN and year > 0
-    valid_month = len(parts[1]) == MONTH_LEN and 1 <= month <= MONTHS_IN_YEAR
-    valid_day_len = len(parts[0]) == DAY_LEN
-    if not (valid_year and valid_month and valid_day_len and _is_valid_day(day, month, year)):
+    if not (
+        (len(parts[2]) == YEAR_LEN and year > 0) and
+        (len(parts[1]) == MONTH_LEN and 1 <= month <= MONTHS_IN_YEAR) and
+        (len(parts[0]) == DAY_LEN and _is_valid_day(day, month, year))
+    ):
         return None
 
     return day, month, year
