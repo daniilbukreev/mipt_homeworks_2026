@@ -243,6 +243,9 @@ def _validate_cost_input(words: list[str]) -> str | None:
     if error_message:
         return error_message
 
+    if amount is None:
+        return None
+
     _, target_category = words[1].split("::")
     return cost_handler(target_category, amount, words[3])
 
