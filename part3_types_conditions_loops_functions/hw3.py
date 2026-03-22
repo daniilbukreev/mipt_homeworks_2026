@@ -75,7 +75,9 @@ def extract_date(maybe_dt: str) -> DateComparable | None:
         return None
     if len(parts[1]) != MONTH_LEN or not (1 <= month <= MONTHS_IN_YEAR):
         return None
-    if len(parts[0]) != DAY_LEN or not _is_valid_day(day, month, year):
+    if len(parts[0]) != DAY_LEN:
+        return None
+    if not _is_valid_day(day, month, year):
         return None
 
     return day, month, year
@@ -123,12 +125,11 @@ def get_monthly_stats(report_date_comparable: DateComparable) -> MonthlyStats:
     for transaction in financial_transactions_storage:
         if date_gentle(transaction[KEY_DATE])[:2] == report_date_comparable[:2]:
             category = transaction.get(KEY_CATEGORY)
-            amount = transaction[KEY_AMOUNT]
             if category is None:
-                monthly_income += amount
+                monthly_income += transaction[KEY_AMOUNT]
             else:
-                monthly_expense += amount
-                category_expenses[category] = category_expenses.get(category, 0) + amount
+                monthly_expense += transaction[KEY_AMOUNT]
+                category_expenses[category] = category_expenses.get(category, 0) + transaction[KEY_AMOUNT]
     return monthly_income, monthly_expense, category_expenses
 
 
@@ -216,6 +217,17 @@ def _parse_and_validate_category(category_str: str) -> str | None:
     return None
 
 
+def _validate_amount_and_date(amount_str: str, date_str: str) -> str | None:
+    amount = extract_amount(amount_str)
+    if amount is None:
+        return UNKNOWN_COMMAND_MSG
+    if amount <= 0:
+        return NONPOSITIVE_VALUE_MSG
+    if extract_date(date_str) is None:
+        return INCORRECT_DATE_MSG
+    return None
+
+
 def _validate_cost_input(words: list[str]) -> str | None:
     error_message = _validate_cost_command_structure(words)
     if error_message:
@@ -227,15 +239,12 @@ def _validate_cost_input(words: list[str]) -> str | None:
     if error_message:
         return error_message
 
-    amount = extract_amount(amount_str)
-    if amount is None:
-        return UNKNOWN_COMMAND_MSG
-    if amount <= 0:
-        return NONPOSITIVE_VALUE_MSG
-    if extract_date(date_str) is None:
-        return INCORRECT_DATE_MSG
+    error_message = _validate_amount_and_date(amount_str, date_str)
+    if error_message:
+        return error_message
 
     _, target_category = category_str.split("::")
+    amount = extract_amount(amount_str)
     return cost_handler(target_category, amount, date_str)
 
 
