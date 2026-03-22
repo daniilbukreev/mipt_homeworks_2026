@@ -67,8 +67,9 @@ def _is_valid_day(day: int, month: int, year: int) -> bool:
 def _is_valid_date_format_and_values(parts: list[str], day: int, month: int, year: int) -> bool:
     is_year_valid = len(parts[2]) == YEAR_LEN and year > 0
     is_month_valid = len(parts[1]) == MONTH_LEN and 1 <= month <= MONTHS_IN_YEAR
-    is_day_valid = len(parts[0]) == DAY_LEN and _is_valid_day(day, month, year)
-    return is_year_valid and is_month_valid and is_day_valid
+    is_day_len_valid = len(parts[0]) == DAY_LEN
+    is_day_value_valid = _is_valid_day(day, month, year)
+    return is_year_valid and is_month_valid and is_day_len_valid and is_day_value_valid
 
 
 def extract_date(maybe_dt: str) -> DateComparable | None:
