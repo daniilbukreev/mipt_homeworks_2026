@@ -75,7 +75,9 @@ def extract_date(maybe_dt: str) -> DateComparable | None:
         return None
     if len(parts[1]) != MONTH_LEN or not (1 <= month <= MONTHS_IN_YEAR):
         return None
-    if len(parts[0]) != DAY_LEN or not _is_valid_day(day, month, year):
+    if len(parts[0]) != DAY_LEN:
+        return None
+    if not _is_valid_day(day, month, year):
         return None
 
     return day, month, year
@@ -123,9 +125,9 @@ def get_monthly_stats(report_date_comparable: DateComparable) -> MonthlyStats:
     for transaction in financial_transactions_storage:
         if date_gentle(transaction[KEY_DATE])[:2] == report_date_comparable[:2]:
             amount = transaction[KEY_AMOUNT]
-            if KEY_CATEGORY in transaction:
+            category = transaction.get(KEY_CATEGORY)
+            if category is not None:
                 monthly_expense += amount
-                category = transaction[KEY_CATEGORY]
                 category_expenses[category] = category_expenses.get(category, 0) + amount
             else:
                 monthly_income += amount
@@ -146,24 +148,32 @@ def get_total_capital(report_date_comparable: DateComparable) -> float:
     return uptill_income - uptill_expense
 
 
-def _print_statistics_report(report_date: str, report_date_comparable: DateComparable) -> None:
-    month_income, month_expense, category_expenses = get_monthly_stats(report_date_comparable)
-    uptill_capital = get_total_capital(report_date_comparable)
+def _print_monthly_profit_loss(month_income: float, month_expense: float) -> None:
     month_res = month_income - month_expense
-
-    print(f"Your statistics as of {report_date}:")
-    print(f"Total capital: {uptill_capital:.2f} rubles")
     if month_res >= 0:
         print(f"This month, the profit amounted to {month_res:.2f} rubles.")
     else:
         print(f"This month, the loss amounted to {abs(month_res):.2f} rubles.")
-    print(f"Income: {month_income:.2f} rubles")
-    print(f"Expenses: {month_expense:.2f} rubles")
+
+
+def _print_category_expenses(category_expenses: dict[str, float]) -> None:
     print()
     print("Details (category: amount):")
     if category_expenses:
         for j, (category, amount) in enumerate(sorted(category_expenses.items()), 1):
             print(f"{j}. {category}: {amount:.2f}")
+
+
+def _print_statistics_report(report_date: str, report_date_comparable: DateComparable) -> None:
+    month_income, month_expense, category_expenses = get_monthly_stats(report_date_comparable)
+    uptill_capital = get_total_capital(report_date_comparable)
+
+    print(f"Your statistics as of {report_date}:")
+    print(f"Total capital: {uptill_capital:.2f} rubles")
+    _print_monthly_profit_loss(month_income, month_expense)
+    print(f"Income: {month_income:.2f} rubles")
+    print(f"Expenses: {month_expense:.2f} rubles")
+    _print_category_expenses(category_expenses)
 
 
 def stats_handler(report_date: str) -> None:
@@ -209,12 +219,14 @@ def _parse_and_validate_category(category_str: str) -> str | None:
 
 
 def _validate_cost_input(words: list[str]) -> str | None:
-    if error_message := _validate_cost_command_structure(words):
+    error_message = _validate_cost_command_structure(words)
+    if error_message:
         return error_message
 
     category_str, amount_str, date_str = words[1], words[2], words[3]
 
-    if error_message := _parse_and_validate_category(category_str):
+    error_message = _parse_and_validate_category(category_str)
+    if error_message:
         return error_message
 
     amount = extract_amount(amount_str)
@@ -222,6 +234,7 @@ def _validate_cost_input(words: list[str]) -> str | None:
         return UNKNOWN_COMMAND_MSG
     if amount <= 0:
         return NONPOSITIVE_VALUE_MSG
+
     if extract_date(date_str) is None:
         return INCORRECT_DATE_MSG
 
