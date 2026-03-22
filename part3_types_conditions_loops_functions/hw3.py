@@ -64,6 +64,13 @@ def _is_valid_day(day: int, month: int, year: int) -> bool:
     return 1 <= day <= days_in_month
 
 
+def _is_valid_date_format_and_values(parts: list[str], day: int, month: int, year: int) -> bool:
+    return (
+        len(parts[2]) == YEAR_LEN and year > 0 and
+        len(parts[1]) == MONTH_LEN and 1 <= month <= MONTHS_IN_YEAR and
+        len(parts[0]) == DAY_LEN and _is_valid_day(day, month, year)
+    )
+
 def extract_date(maybe_dt: str) -> DateComparable | None:
     parts = maybe_dt.split("-")
     if not _is_valid_date_parts(parts):
@@ -71,11 +78,7 @@ def extract_date(maybe_dt: str) -> DateComparable | None:
 
     day, month, year = map(int, parts)
 
-    if not (
-        (len(parts[2]) == YEAR_LEN and year > 0) and
-        (len(parts[1]) == MONTH_LEN and 1 <= month <= MONTHS_IN_YEAR) and
-        (len(parts[0]) == DAY_LEN and _is_valid_day(day, month, year))
-    ):
+    if not _is_valid_date_format_and_values(parts, day, month, year):
         return None
 
     return day, month, year
