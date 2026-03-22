@@ -108,7 +108,10 @@ def cost_handler(category_name: str, amount: float, income_date: str) -> str:
 
 
 def cost_categories_handler() -> str:
-    return "\n".join(f"{category}::{item}" for category, items in EXPENSE_CATEGORIES.items() for item in items)
+    for category, items in EXPENSE_CATEGORIES.items():
+        for item in items:
+            print(f"{category}::{item}")
+    return ""
 
 
 def date_gentle(date_str: str) -> DateComparable:
