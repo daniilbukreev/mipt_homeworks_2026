@@ -75,9 +75,7 @@ def extract_date(maybe_dt: str) -> DateComparable | None:
         return None
     if len(parts[1]) != MONTH_LEN or not (1 <= month <= MONTHS_IN_YEAR):
         return None
-    if len(parts[0]) != DAY_LEN:
-        return None
-    if not _is_valid_day(day, month, year):
+    if len(parts[0]) != DAY_LEN or not _is_valid_day(day, month, year):
         return None
 
     return day, month, year
@@ -124,13 +122,13 @@ def get_monthly_stats(report_date_comparable: DateComparable) -> MonthlyStats:
 
     for transaction in financial_transactions_storage:
         if date_gentle(transaction[KEY_DATE])[:2] == report_date_comparable[:2]:
-            amount = transaction[KEY_AMOUNT]
             category = transaction.get(KEY_CATEGORY)
-            if category is not None:
+            amount = transaction[KEY_AMOUNT]
+            if category is None:
+                monthly_income += amount
+            else:
                 monthly_expense += amount
                 category_expenses[category] = category_expenses.get(category, 0) + amount
-            else:
-                monthly_income += amount
     return monthly_income, monthly_expense, category_expenses
 
 
@@ -234,7 +232,6 @@ def _validate_cost_input(words: list[str]) -> str | None:
         return UNKNOWN_COMMAND_MSG
     if amount <= 0:
         return NONPOSITIVE_VALUE_MSG
-
     if extract_date(date_str) is None:
         return INCORRECT_DATE_MSG
 
