@@ -32,48 +32,40 @@ COST_CATEGORIES_COMMAND_LEN = 2
 COST_COMMAND_LEN = 4
 CATEGORY_PARTS_LEN = 2
 STATS_COMMAND_LEN = 2
+KEY_AMOUNT = "amount"
+KEY_DATE = "date"
+KEY_CATEGORY = "category"
 
 financial_transactions_storage: list[dict[str, Any]] = []
 
 
 def is_leap_year(year: int) -> bool:
-    return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
+    is_divisible_by_4 = year % 4 == 0
+    is_not_divisible_by_100 = year % 100 != 0
+    is_divisible_by_400 = year % 400 == 0
+    return (is_divisible_by_4 and is_not_divisible_by_100) or is_divisible_by_400
 
 
 def extract_date(maybe_dt: str) -> tuple[int, int, int] | None:
     parts = list(maybe_dt.split("-"))
-    if len(parts) != DATE_PARTS_LEN:
-        return None
-
-    day_str = parts[0]
-    month_str = parts[1]
-    year_str = parts[2]
-
-    if not (day_str.isdigit() and month_str.isdigit() and year_str.isdigit()):
-        return None
-
-    day = int(day_str)
-    month = int(month_str)
-    year = int(year_str)
-    if (
-        len(year_str) != YEAR_LEN
-        or year == 0
-        or len(month_str) != MONTH_LEN
-        or not 1 <= month <= MONTHS_IN_YEAR
-        or len(day_str) != DAY_LEN
-        or not 1 <= day <= MAX_DAYS_IN_MONTH
-    ):
-        return None
-
-    days_in_month = MAX_DAYS_IN_MONTH
-    if month in {4, 6, 9, 11}:
-        days_in_month = 30
-    elif month == FEBRUARY:
-        days_in_month = 29 if is_leap_year(year) else 28
-    if not 1 <= day <= days_in_month:
-        return None
-
-    return day, month, year
+    if len(parts) == DATE_PARTS_LEN and all(part.isdigit() for part in parts):
+        day, month, year = map(int, parts)
+        if (
+            len(parts[2]) == YEAR_LEN
+            and year > 0
+            and len(parts[1]) == MONTH_LEN
+            and 1 <= month <= MONTHS_IN_YEAR
+            and len(parts[0]) == DAY_LEN
+            and 1 <= day <= MAX_DAYS_IN_MONTH
+        ):
+            days_in_month = MAX_DAYS_IN_MONTH
+            if month in {4, 6, 9, 11}:
+                days_in_month = 30
+            elif month == FEBRUARY:
+                days_in_month = 29 if is_leap_year(year) else 28
+            if 1 <= day <= days_in_month:
+                return day, month, year
+    return None
 
 
 def extract_amount(amount_str: str) -> float | None:
@@ -89,12 +81,12 @@ def extract_amount(amount_str: str) -> float | None:
 
 
 def income_handler(amount: float, income_date: str) -> str:
-    financial_transactions_storage.append({"amount": amount, "date": income_date})
+    financial_transactions_storage.append({KEY_AMOUNT: amount, KEY_DATE: income_date})
     return OP_SUCCESS_MSG
 
 
 def cost_handler(category_name: str, amount: float, income_date: str) -> str:
-    financial_transactions_storage.append({"category": category_name, "amount": amount, "date": income_date})
+    financial_transactions_storage.append({KEY_CATEGORY: category_name, KEY_AMOUNT: amount, KEY_DATE: income_date})
     return OP_SUCCESS_MSG
 
 
@@ -107,34 +99,45 @@ def date_gentle(date_str: str) -> tuple[int, int, int]:
     return int(parts[2]), int(parts[1]), int(parts[0])
 
 
-def stats_handler(report_date: str) -> str:
-    report_date_comparable = date_gentle(report_date)
-
-    uptill_income = 0
-    uptill_expense = 0
+def get_monthly_stats(report_date_comparable: tuple[int, int, int]) -> tuple[float, float, dict[str, float]]:
     month_income = 0
     month_expense = 0
     month_category_expenses: dict[str, float] = {}
 
     for i in financial_transactions_storage:
-        date = date_gentle(i["date"])
-        if date <= report_date_comparable:
-            if "category" not in i:
-                uptill_income += i["amount"]
-            else:
-                uptill_expense += i["amount"]
-        if (date[0] == report_date_comparable[0] and date[1] == report_date_comparable[1]):
-            if "category" not in i:
-                month_income += i["amount"]
-            else:
-                month_expense += i["amount"]
-                category = i["category"]
-                if (month_category_expenses.get(category) is None):
+        date = date_gentle(i[KEY_DATE])
+        if date[0] == report_date_comparable[0] and date[1] == report_date_comparable[1]:
+            if KEY_CATEGORY in i:
+                month_expense += i[KEY_AMOUNT]
+                category = i[KEY_CATEGORY]
+                if month_category_expenses.get(category) is None:
                     month_category_expenses[category] = 0
-                month_category_expenses[category] += i["amount"]
+                month_category_expenses[category] += i[KEY_AMOUNT]
+            else:
+                month_income += i[KEY_AMOUNT]
+    return month_income, month_expense, month_category_expenses
 
-    uptill_capital = uptill_income - uptill_expense
+
+def get_total_capital(report_date_comparable: tuple[int, int, int]) -> float:
+    uptill_income = 0
+    uptill_expense = 0
+
+    for i in financial_transactions_storage:
+        date = date_gentle(i[KEY_DATE])
+        if date <= report_date_comparable:
+            if KEY_CATEGORY in i:
+                uptill_expense += i[KEY_AMOUNT]
+            else:
+                uptill_income += i[KEY_AMOUNT]
+    return uptill_income - uptill_expense
+
+
+def stats_handler(report_date: str) -> str:
+    report_date_comparable = date_gentle(report_date)
+    month_income, month_expense, month_category_expenses = get_monthly_stats(report_date_comparable)
+    uptill_capital = get_total_capital(report_date_comparable)
     month_res = month_income - month_expense
+
     print(f"Your statistics as of {report_date}:")
     print(f"Total capital: {uptill_capital:.2f} rubles")
     if month_res >= 0:
@@ -175,43 +178,33 @@ def income(words: list[str]) -> None:
 
     print(income_handler(amount, date_str))
 
+
 def cost(words: list[str]) -> None:
     if len(words) == COST_CATEGORIES_COMMAND_LEN and words[1] == "categories":
         print(cost_categories_handler())
-        return
-    if len(words) != COST_COMMAND_LEN:
+    elif len(words) == COST_COMMAND_LEN:
+        category_str, amount_str, date_str = words[1], words[2], words[3]
+        category_parts = list(category_str.split("::"))
+        if len(category_parts) == CATEGORY_PARTS_LEN:
+            common_category, target_category = category_parts
+            if common_category in EXPENSE_CATEGORIES and target_category in EXPENSE_CATEGORIES[common_category]:
+                amount = extract_amount(amount_str)
+                if amount is not None and amount > 0 and extract_date(date_str) is not None:
+                    print(cost_handler(target_category, amount, date_str))
+                elif amount is None:
+                    print(UNKNOWN_COMMAND_MSG)
+                elif amount <= 0:
+                    print(NONPOSITIVE_VALUE_MSG)
+                else:
+                    print(INCORRECT_DATE_MSG)
+            else:
+                print(NOT_EXISTS_CATEGORY)
+                print(cost_categories_handler())
+        else:
+            print(NOT_EXISTS_CATEGORY)
+            print(cost_categories_handler())
+    else:
         print(UNKNOWN_COMMAND_MSG)
-        return
-    category_str = words[1]
-    amount_str = words[2]
-    date_str = words[3]
-
-    valid_category = False
-    target_category = ""
-    category_parts = list(category_str.split("::"))
-    if len(category_parts) == CATEGORY_PARTS_LEN:
-        common_category = category_parts[0]
-        temp_targ_category = category_parts[1]
-        if common_category in EXPENSE_CATEGORIES and temp_targ_category in EXPENSE_CATEGORIES[common_category]:
-            valid_category = True
-            target_category = temp_targ_category
-    if not valid_category:
-        print(NOT_EXISTS_CATEGORY)
-        print(cost_categories_handler())
-        return
-
-    amount = extract_amount(amount_str)
-    if amount is None:
-        print(UNKNOWN_COMMAND_MSG)
-        return
-    if amount <= 0:
-        print(NONPOSITIVE_VALUE_MSG)
-        return
-    if extract_date(date_str) is None:
-        print(INCORRECT_DATE_MSG)
-        return
-
-    print(cost_handler(target_category, amount, date_str))
 
 
 def stats(words: list[str]) -> None:
