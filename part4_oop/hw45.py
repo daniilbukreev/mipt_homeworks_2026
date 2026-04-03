@@ -96,7 +96,7 @@ class LFUPolicy(Policy[K]):
 
     def get_key_to_evict(self) -> K | None:
         if len(self._key_counter) > self.capacity:
-            min_count = float(10 ** 100)
+            min_count = float(10**100)
             key_to_evict = None
             for key, count in self._key_counter.items():
                 if count < min_count:
@@ -153,9 +153,7 @@ class CachedProperty[V]:
         self.func = func
         self.name = func.__name__
 
-    def __get__(
-        self, instance: HasCache[Any, Any] | None, owner: type
-    ) -> V | CachedProperty[V]:
+    def __get__(self, instance: HasCache[Any, Any] | None, owner: type) -> V | CachedProperty[V]:
         if instance is None:
             return self
 
