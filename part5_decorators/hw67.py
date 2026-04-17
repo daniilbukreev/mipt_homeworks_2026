@@ -113,6 +113,7 @@ class CircuitBreaker:
 
 circuit_breaker = CircuitBreaker(5, 30, Exception)
 
+
 # @circuit_breaker
 def get_comments(post_id: int) -> Any:
     """
