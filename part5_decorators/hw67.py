@@ -1,13 +1,14 @@
 import json
 from datetime import UTC, datetime
 from functools import wraps
-from typing import Any, ParamSpec, Protocol, TypeVar
+from typing import Any, NoReturn, ParamSpec, Protocol, TypeVar
 from urllib.request import urlopen
 
 INVALID_CRITICAL_COUNT = "Breaker count must be positive integer!"
 INVALID_RECOVERY_TIME = "Breaker recovery time must be positive integer!"
 VALIDATIONS_FAILED = "Invalid decorator args."
 TOO_MUCH = "Too much requests, just wait."
+UNREACH_MYPY_STUB = "UNREACH_MYPY_STUB"
 
 P = ParamSpec("P")
 R_co = TypeVar("R_co", covariant=True)
@@ -62,10 +63,11 @@ class CircuitBreaker:
             else:
                 self._reset()
                 return result
+            raise RuntimeError(UNREACH_MYPY_STUB)
 
         return wrapper
 
-    def _check_open_state(self, func: CallableWithMeta) -> None:
+    def _check_open_state(self, func: CallableWithMeta[Any, Any]) -> None:
         if self._state != "open":
             return
 
@@ -81,7 +83,7 @@ class CircuitBreaker:
                 block_time=self._opened_at,
             )
 
-    def _handle_exception(self, exc: Exception, func: CallableWithMeta) -> None:
+    def _handle_exception(self, exc: Exception, func: CallableWithMeta[Any, Any]) -> NoReturn:
         if self._state == "half-open":
             self._open_circuit(func, exc)
         else:  # closed
@@ -90,8 +92,9 @@ class CircuitBreaker:
                 self._open_circuit(func, exc)
             else:
                 raise exc
+        raise RuntimeError(UNREACH_MYPY_STUB)
 
-    def _open_circuit(self, func: CallableWithMeta, cause: Exception | None = None) -> None:
+    def _open_circuit(self, func: CallableWithMeta[Any, Any], cause: Exception | None = None) -> NoReturn:
         self._state = "open"
         self._opened_at = datetime.now(UTC)
         error = BreakerError(
@@ -109,7 +112,6 @@ class CircuitBreaker:
 
 
 circuit_breaker = CircuitBreaker(5, 30, Exception)
-
 
 # @circuit_breaker
 def get_comments(post_id: int) -> Any:
